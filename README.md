@@ -21,7 +21,7 @@ Requer Node.js 16 ou superior.
     cd srvdob
     npm install
 
-Crie o arquivo .env:
+Crie o arquivo `.env`:
 
     ACCOUNT_NAME="seu_usuario"
     GAMES="730,440"
