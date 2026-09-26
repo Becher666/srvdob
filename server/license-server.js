@@ -5,139 +5,179 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = Number(process.env.PORT || 8787);
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
-const DATA_FILE = path.join(process.cwd(), "licenses.json");
+const PORT = Number(process.env.PORT || 8080);
+const ADMIN_TOKEN = String(process.env.RB_ADMIN_TOKEN || "");
+const DB_FILE = path.resolve(process.env.RB_LICENSE_DB || "./server/licenses.json");
 
-if (!ADMIN_TOKEN) {
-  console.error("Configure ADMIN_TOKEN antes de iniciar o servidor.");
-  process.exit(1);
+function ensureDb() {
+  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({ licenses: [] }, null, 2), { mode: 0o600 });
 }
 
-function load() {
-  try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
-  catch { return { licenses: {} }; }
+function readDb() {
+  ensureDb();
+  try { return JSON.parse(fs.readFileSync(DB_FILE, "utf8")); }
+  catch { return { licenses: [] }; }
 }
 
-function save(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
-}
-
-function keyHash(key) {
-  return crypto.createHash("sha256").update(key).digest("hex");
-}
-
-function newKey() {
-  const part = () => crypto.randomBytes(3).toString("hex").toUpperCase();
-  return `RB-${part()}-${part()}-${part()}`;
-}
-
-function durationDays(plan) {
-  if (plan === "WEEK") return 7;
-  if (plan === "MONTH") return 30;
-  if (plan === "YEAR") return 365;
-  return null;
+function writeDb(db) {
+  const tmp = DB_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(db, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, DB_FILE);
 }
 
 function send(res, status, body) {
-  const data = JSON.stringify(body);
-  res.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "content-length": Buffer.byteLength(data)
-  });
-  res.end(data);
+  res.writeHead(status, {"content-type":"application/json; charset=utf-8","cache-control":"no-store"});
+  res.end(JSON.stringify(body));
 }
 
-function body(req) {
+function readJson(req) {
   return new Promise((resolve, reject) => {
-    let raw = "";
+    let data = "";
     req.on("data", chunk => {
-      raw += chunk;
-      if (raw.length > 100000) req.destroy();
+      data += chunk;
+      if (data.length > 1024 * 1024) { req.destroy(); reject(new Error("too_large")); }
     });
     req.on("end", () => {
-      try { resolve(raw ? JSON.parse(raw) : {}); }
-      catch { reject(new Error("JSON inválido")); }
+      try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error("invalid_json")); }
     });
     req.on("error", reject);
   });
 }
 
-const data = load();
+function keyHash(key) {
+  return crypto.createHash("sha256").update(String(key).trim().toUpperCase()).digest("hex");
+}
 
-const server = http.createServer(async (req, res) => {
-  try {
-    if (req.method === "POST" && req.url === "/v1/licenses/validate") {
-      const input = await body(req);
-      const key = String(input.key || "").trim().toUpperCase();
-      const item = data.licenses[keyHash(key)];
+function generateKey() {
+  const part = () => crypto.randomBytes(4).toString("hex").toUpperCase();
+  return "RB-" + part() + "-" + part() + "-" + part();
+}
 
-      if (!item) return send(res, 200, { valid: false, code: "INVALID_LICENSE", message: "Licença não encontrada." });
-      if (item.revoked) return send(res, 200, { valid: false, code: "REVOKED", message: "Licença revogada." });
+function adminOk(req) {
+  if (!ADMIN_TOKEN) return false;
+  const supplied = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(ADMIN_TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
-      const now = Date.now();
-      if (item.expiresAt && now >= new Date(item.expiresAt).getTime()) {
-        return send(res, 200, { valid: false, code: "EXPIRED", message: "Licença expirada." });
-      }
+function durationToMs(plan) {
+  const value = String(plan || "").toLowerCase();
+  if (value === "7" || value === "7d" || value === "weekly") return 7 * 86400000;
+  if (value === "30" || value === "30d" || value === "monthly") return 30 * 86400000;
+  if (value === "365" || value === "365d" || value === "yearly") return 365 * 86400000;
+  if (value === "lifetime" || value === "vitalicio") return null;
+  return undefined;
+}
 
-      const device = String(input.deviceId || "").trim();
-      if (!item.deviceId && device) {
-        item.deviceId = device;
-        item.updatedAt = new Date().toISOString();
-        save(data);
-      } else if (item.deviceId && item.deviceId !== device) {
-        return send(res, 200, { valid: false, code: "DEVICE_LIMIT", message: "Licença vinculada a outro dispositivo." });
-      }
+async function route(req, res) {
+  const url = new URL(req.url, "http://localhost");
+  const db = readDb();
 
-      return send(res, 200, {
-        valid: true,
-        plan: item.plan,
-        expiresAt: item.expiresAt,
-        message: "Licença válida."
-      });
+  if (req.method === "GET" && url.pathname === "/health")
+    return send(res, 200, {ok:true, service:"royal-bunker-license-server"});
+
+  if (req.method === "POST" && url.pathname === "/v1/licenses/validate") {
+    let body;
+    try { body = await readJson(req); } catch { return send(res,400,{valid:false,code:"INVALID_JSON"}); }
+
+    const key = String(body.key || "").trim().toUpperCase();
+    const row = db.licenses.find(x => x.hash === keyHash(key));
+    if (!row) return send(res,404,{valid:false,code:"INVALID_LICENSE",message:"Licença não encontrada."});
+    if (row.revoked) return send(res,403,{valid:false,code:"REVOKED",message:"Licença revogada."});
+    if (row.expiresAt && Date.now() >= Date.parse(row.expiresAt))
+      return send(res,403,{valid:false,code:"EXPIRED",message:"Licença expirada."});
+
+    const deviceId = String(body.deviceId || "").trim();
+    if (!deviceId) return send(res,400,{valid:false,code:"MISSING_DEVICE"});
+
+    if (!row.deviceId) {
+      row.deviceId = deviceId;
+      row.boundAt = new Date().toISOString();
+    } else if (row.deviceId !== deviceId) {
+      return send(res,403,{valid:false,code:"DEVICE_MISMATCH",message:"Esta licença já está vinculada a outro dispositivo."});
     }
 
-    if (req.method === "POST" && req.url === "/admin/licenses/generate") {
-      if (req.headers.authorization !== `Bearer ${ADMIN_TOKEN}`) return send(res, 401, { error: "Não autorizado." });
+    row.lastSeenAt = new Date().toISOString();
+    row.lastVersion = String(body.version || "");
+    writeDb(db);
 
-      const input = await body(req);
-      const plan = String(input.plan || "").toUpperCase();
-      const days = durationDays(plan);
-      if (!days) return send(res, 400, { error: "Plano inválido. Use WEEK, MONTH ou YEAR." });
-
-      const key = newKey();
-      const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
-      data.licenses[keyHash(key)] = {
-        plan,
-        expiresAt,
-        revoked: false,
-        deviceId: null,
-        createdAt: new Date().toISOString()
-      };
-      save(data);
-
-      return send(res, 201, { key, plan, expiresAt });
-    }
-
-    if (req.method === "POST" && req.url === "/admin/licenses/revoke") {
-      if (req.headers.authorization !== `Bearer ${ADMIN_TOKEN}`) return send(res, 401, { error: "Não autorizado." });
-
-      const input = await body(req);
-      const hash = keyHash(String(input.key || "").trim().toUpperCase());
-      if (!data.licenses[hash]) return send(res, 404, { error: "Licença não encontrada." });
-
-      data.licenses[hash].revoked = true;
-      data.licenses[hash].updatedAt = new Date().toISOString();
-      save(data);
-      return send(res, 200, { ok: true });
-    }
-
-    return send(res, 404, { error: "Rota não encontrada." });
-  } catch (error) {
-    return send(res, 500, { error: "Erro interno." });
+    return send(res,200,{
+      valid:true,
+      plan:row.plan,
+      expiresAt:row.expiresAt,
+      message:row.expiresAt ? "Licença válida." : "Licença vitalícia válida."
+    });
   }
-});
 
-server.listen(PORT, () => {
-  console.log(`Royal Bunker License Server ouvindo na porta ${PORT}`);
-});
+  if (!adminOk(req)) return send(res,401,{ok:false,error:"UNAUTHORIZED"});
+
+  let body;
+  if (req.method === "POST") {
+    try { body = await readJson(req); } catch { return send(res,400,{ok:false,error:"INVALID_JSON"}); }
+  }
+
+  if (req.method === "POST" && url.pathname === "/v1/admin/licenses/generate") {
+    const duration = durationToMs(body.plan);
+    if (duration === undefined) return send(res,400,{ok:false,error:"INVALID_PLAN",allowed:["7","30","365","lifetime"]});
+
+    const key = generateKey();
+    const now = new Date();
+    const expiresAt = duration === null ? null : new Date(now.getTime()+duration).toISOString();
+
+    db.licenses.push({
+      hash:keyHash(key),
+      plan:duration === null ? "LIFETIME" : String(body.plan),
+      expiresAt,
+      createdAt:now.toISOString(),
+      deviceId:null,
+      revoked:false,
+      note:String(body.note || "").slice(0,200)
+    });
+    writeDb(db);
+    return send(res,201,{ok:true,key,plan:duration === null ? "LIFETIME" : String(body.plan),expiresAt});
+  }
+
+  if (req.method === "POST" && url.pathname === "/v1/admin/licenses/revoke") {
+    const row = db.licenses.find(x => x.hash === keyHash(body.key));
+    if (!row) return send(res,404,{ok:false,error:"NOT_FOUND"});
+    row.revoked = true;
+    row.revokedAt = new Date().toISOString();
+    writeDb(db);
+    return send(res,200,{ok:true});
+  }
+
+  if (req.method === "POST" && url.pathname === "/v1/admin/licenses/reset-device") {
+    const row = db.licenses.find(x => x.hash === keyHash(body.key));
+    if (!row) return send(res,404,{ok:false,error:"NOT_FOUND"});
+    row.deviceId = null;
+    row.boundAt = null;
+    writeDb(db);
+    return send(res,200,{ok:true});
+  }
+
+  if (req.method === "POST" && url.pathname === "/v1/admin/licenses/renew") {
+    const duration = durationToMs(body.plan);
+    if (duration === undefined || duration === null) return send(res,400,{ok:false,error:"INVALID_RENEWAL_PLAN"});
+    const row = db.licenses.find(x => x.hash === keyHash(body.key));
+    if (!row) return send(res,404,{ok:false,error:"NOT_FOUND"});
+    const base = row.expiresAt && Date.parse(row.expiresAt) > Date.now() ? Date.parse(row.expiresAt) : Date.now();
+    row.expiresAt = new Date(base+duration).toISOString();
+    row.plan = String(body.plan);
+    row.revoked = false;
+    row.renewedAt = new Date().toISOString();
+    writeDb(db);
+    return send(res,200,{ok:true,expiresAt:row.expiresAt});
+  }
+
+  if (req.method === "GET" && url.pathname === "/v1/admin/licenses") {
+    return send(res,200,{ok:true,licenses:db.licenses.map(x=>({plan:x.plan,expiresAt:x.expiresAt,revoked:!!x.revoked,bound:!!x.deviceId}))});
+  }
+
+  return send(res,404,{ok:false,error:"NOT_FOUND"});
+}
+
+ensureDb();
+http.createServer((req,res)=>route(req,res).catch(()=>send(res,500,{ok:false,error:"INTERNAL_ERROR"})))
+  .listen(PORT,"0.0.0.0",()=>console.log("Royal Bunker License Server — port "+PORT));

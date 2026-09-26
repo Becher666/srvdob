@@ -1,6 +1,8 @@
-node_modules/
 .env
+node_modules/
 SteamData/
 npm-debug.log*
 .DS_Store
-license.json\n
+license.json
+server/licenses.json
+server/*.log

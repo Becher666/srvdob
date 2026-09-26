@@ -10,7 +10,7 @@ Cliente de terminal para manter jogos selecionados da sua biblioteca Steam em at
 - Reconexão automática
 - Detecção de outra sessão ativa
 - Steam Guard
-- Sistema de licença preparado para validação online
+- Sistema de licença validado online
 - Comandos `rb` e `royal-bunker`
 
 ## Requisitos
@@ -34,17 +34,21 @@ A senha do Steam é solicitada no terminal e não é salva no arquivo de configu
 
 ## Licenciamento
 
-A versão distribuída pode usar uma licença vinculada ao dispositivo e validada pelo servidor.
-
-Planos planejados:
+Planos:
 
 - 7 dias — R$20
 - 30 dias — R$60
-- 365 dias — R$100
+- Vitalício — R$100
 
-A licença deve ser validada pelo servidor antes do farming. Licenças expiradas ou revogadas são recusadas.
+A licença é validada pelo servidor antes do farming. Licenças expiradas, revogadas ou vinculadas a outro dispositivo são recusadas.
 
-O cliente não contém uma chave administrativa ou segredo do servidor. A geração, renovação e revogação devem ficar no serviço privado de licenciamento.
+## Servidor de licenças
+
+O servidor fica em `server/license-server.js`.
+
+    npm run license-server
+
+A geração, renovação e revogação usam rotas administrativas protegidas por segredo de servidor. Esse segredo nunca deve entrar no cliente.
 
 ## Iniciar
 
@@ -70,7 +74,7 @@ Para manter o processo rodando em segundo plano, use tmux.
 
 ## Segurança
 
-Não publique seu arquivo `.env`, `license.json` ou credenciais do Steam. Nunca compartilhe códigos do Steam Guard.
+Não publique seu arquivo `.env`, `license.json`, `server/licenses.json` ou credenciais do Steam. Nunca compartilhe códigos do Steam Guard.
 
 ## Código e licença
 

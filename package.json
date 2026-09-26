@@ -11,7 +11,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "license-server": "node server/license-server.js"
   },
   "repository": "github:Becher666/srvdob",
   "keywords": [
