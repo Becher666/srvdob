@@ -10,23 +10,41 @@ Cliente de terminal para manter jogos selecionados da sua biblioteca Steam em at
 - Reconexão automática
 - Detecção de outra sessão ativa
 - Steam Guard
-- Configuração simples por .env
+- Sistema de licença preparado para validação online
 - Comandos `rb` e `royal-bunker`
 
-## Instalação
+## Requisitos
 
-Requer Node.js 16 ou superior.
+Node.js 18 ou superior.
+
+## Instalação
 
     git clone https://github.com/Becher666/srvdob.git
     cd srvdob
     npm install
 
-Crie o arquivo `.env`:
+Crie o arquivo `.env` a partir do exemplo:
 
     ACCOUNT_NAME="seu_usuario"
     GAMES="730,440"
+    LICENSE_API_URL="https://seu-servidor"
+    LICENSE_KEY="RB-XXXX-XXXX-XXXX"
 
-A senha é solicitada no terminal no momento da inicialização e não é gravada no arquivo de configuração.
+A senha do Steam é solicitada no terminal e não é salva no arquivo de configuração.
+
+## Licenciamento
+
+A versão distribuída pode usar uma licença vinculada ao dispositivo e validada pelo servidor.
+
+Planos planejados:
+
+- 7 dias — R$20
+- 30 dias — R$60
+- 365 dias — R$100
+
+A licença deve ser validada pelo servidor antes do farming. Licenças expiradas ou revogadas são recusadas.
+
+O cliente não contém uma chave administrativa ou segredo do servidor. A geração, renovação e revogação devem ficar no serviço privado de licenciamento.
 
 ## Iniciar
 
@@ -44,6 +62,7 @@ Ou instalar o comando:
     git clone https://github.com/Becher666/srvdob.git
     cd srvdob
     npm install
+    cp .env.example .env
     nano .env
     npm start
 
@@ -51,8 +70,12 @@ Para manter o processo rodando em segundo plano, use tmux.
 
 ## Segurança
 
-Não publique seu arquivo .env e nunca compartilhe credenciais ou códigos do Steam Guard.
+Não publique seu arquivo `.env`, `license.json` ou credenciais do Steam. Nunca compartilhe códigos do Steam Guard.
 
-## Licença
+## Código e licença
 
-MIT. A implementação inclui código derivado de trabalho originalmente publicado por tacheometry no projeto steam-hour-farmer. O aviso de copyright e os termos da licença original permanecem em LICENSE.md.
+Este projeto é distribuído sob MIT. Parte da implementação deriva de trabalho originalmente publicado por tacheometry no projeto steam-hour-farmer. Os avisos de copyright e os termos da licença original permanecem em `LICENSE.md`.
+
+## Suporte
+
+O tutorial e o suporte da versão comercial podem ser oferecidos pelo Discord do Royal Bunker.
