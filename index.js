@@ -6,7 +6,7 @@ const path = require("path");
 const readline = require("readline");
 const util = require("util");
 const Steam = require("steam-user");
-const TOTP = require("steam-totp");
+const TOTP = require("steam-totp");\nconst license = require("./license");
 
 require("dotenv").config();
 
@@ -42,7 +42,7 @@ let active = false;
 let status = "Aguardando conexão...";
 let lastLogin = 0;
 let lastRefresh = 0;
-let retryAfter = 0;
+let retryAfter = 0;\nlet licenseInfo = null;
 let password = "";
 
 function nameOf(id) { return catalog[id] || id; }
@@ -55,7 +55,7 @@ function render() {
   console.log("║          STEAM FARMER               ║");
   console.log("╚══════════════════════════════════════╝" + colors.r);
   console.log("");
-  console.log("  Steam: " + (connected ? colors.g + "● conectado" : colors.red + "● desconectado") + colors.r);
+  console.log("  Licença: " + (licenseInfo ? colors.g + (licenseInfo.plan || "ATIVA") : colors.red + "não validada") + colors.r);\n  if (licenseInfo && licenseInfo.expiresAt) console.log("  Expira: " + license.formatExpiration(licenseInfo.expiresAt));\n  console.log("  Steam: " + (connected ? colors.g + "● conectado" : colors.red + "● desconectado") + colors.r);
   console.log("  Conta: " + account);
   console.log("  Jogos: " + games.length);
   console.log("  Farming: " + (active ? colors.g + "ATIVO" : colors.y + "PAUSADO") + colors.r);
