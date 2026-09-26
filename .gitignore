@@ -3,3 +3,4 @@ node_modules/
 SteamData/
 npm-debug.log*
 .DS_Store
+license.json\n
