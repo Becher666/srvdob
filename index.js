@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
 const readline = require("readline");
 const util = require("util");
 const Steam = require("steam-user");
-const TOTP = require("steam-totp");\nconst license = require("./license");
-
+const license = require("./license");
 require("dotenv").config();
 
-const envFile = path.join(process.cwd(), ".env");
-const colors = { r:"\x1b[0m", b:"\x1b[1m", c:"\x1b[36m", g:"\x1b[32m", y:"\x1b[33m", red:"\x1b[31m" };
+const colors = {
+  r: "\x1b[0m", b: "\x1b[1m", c: "\x1b[36m",
+  g: "\x1b[32m", y: "\x1b[33m", red: "\x1b[31m"
+};
+
 const ask = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = util.promisify(ask.question).bind(ask);
 
@@ -42,7 +42,8 @@ let active = false;
 let status = "Aguardando conexão...";
 let lastLogin = 0;
 let lastRefresh = 0;
-let retryAfter = 0;\nlet licenseInfo = null;
+let retryAfter = 0;
+let licenseInfo = null;
 let password = "";
 
 function nameOf(id) { return catalog[id] || id; }
@@ -55,7 +56,9 @@ function render() {
   console.log("║          STEAM FARMER               ║");
   console.log("╚══════════════════════════════════════╝" + colors.r);
   console.log("");
-  console.log("  Licença: " + (licenseInfo ? colors.g + (licenseInfo.plan || "ATIVA") : colors.red + "não validada") + colors.r);\n  if (licenseInfo && licenseInfo.expiresAt) console.log("  Expira: " + license.formatExpiration(licenseInfo.expiresAt));\n  console.log("  Steam: " + (connected ? colors.g + "● conectado" : colors.red + "● desconectado") + colors.r);
+  console.log("  Licença: " + (licenseInfo ? colors.g + (licenseInfo.plan || "ATIVA") : colors.red + "não validada") + colors.r);
+  if (licenseInfo && licenseInfo.expiresAt) console.log("  Expira: " + license.formatExpiration(licenseInfo.expiresAt));
+  console.log("  Steam: " + (connected ? colors.g + "● conectado" : colors.red + "● desconectado") + colors.r);
   console.log("  Conta: " + account);
   console.log("  Jogos: " + games.length);
   console.log("  Farming: " + (active ? colors.g + "ATIVO" : colors.y + "PAUSADO") + colors.r);
@@ -136,15 +139,28 @@ user.on("error", err => {
 });
 
 async function start() {
+  licenseInfo = await license.validate();
+  if (!licenseInfo.ok) {
+    render();
+    console.error(colors.red + "\n  " + licenseInfo.message + colors.r);
+    console.error("  Configure LICENSE_KEY e LICENSE_API_URL no .env.");
+    ask.close();
+    process.exit(2);
+  }
+
   password = await question("Senha da conta Steam: ");
   login();
+
   while (true) {
     render();
     const choice = (await question("  > ")).trim();
-    if (choice === "1") refresh(true);
-    else if (choice === "2") {
+    if (choice === "1") {
+      refresh(true);
+    } else if (choice === "2") {
       console.log("\nConta: " + account);
       console.log("Steam: " + (connected ? "conectado" : "desconectado"));
+      console.log("Licença: " + (licenseInfo.plan || "ativa"));
+      if (licenseInfo.expiresAt) console.log("Expira: " + license.formatExpiration(licenseInfo.expiresAt));
       console.log("Farming: " + (active ? "ativo" : "pausado"));
       await question("\nEnter para voltar...");
     } else if (choice === "3") {
@@ -154,7 +170,12 @@ async function start() {
   }
 }
 
-process.on("SIGINT", () => { ask.close(); console.log("\nRoyal Bunker encerrado."); process.exit(0); });
+process.on("SIGINT", () => {
+  ask.close();
+  console.log("\nRoyal Bunker encerrado.");
+  process.exit(0);
+});
+
 start();
 setInterval(login, 10 * 60 * 1000);
 setInterval(() => refresh(false), 5 * 60 * 1000);
