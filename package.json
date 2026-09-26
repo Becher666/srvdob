@@ -1,14 +1,31 @@
 {
   "name": "royal-bunker-steam-farmer",
   "version": "1.0.0",
-  "description": "Royal Bunker Steam Farmer - gerenciamento simples de horas e jogos no Steam.",
+  "description": "Royal Bunker Steam Farmer - gerenciamento de horas e jogos no Steam.",
   "main": "index.js",
-  "bin": {"royal-bunker": "./index.js", "rb": "./index.js"},
-  "engines": {"node": ">=16.0.0"},
-  "scripts": {"start": "node index.js"},
+  "bin": {
+    "royal-bunker": "./index.js",
+    "rb": "./index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
   "repository": "github:Becher666/srvdob",
-  "keywords": ["steam", "farmer", "idle", "royal-bunker", "termux"],
+  "keywords": [
+    "steam",
+    "farmer",
+    "idle",
+    "royal-bunker",
+    "termux"
+  ],
   "author": "Royal Bunker",
   "license": "MIT",
-  "dependencies": {"dotenv": "^16.4.5", "steam-totp": "^2.1.2", "steam-user": "^5.0.8"}
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "steam-totp": "^2.1.2",
+    "steam-user": "^5.0.8"
+  }
 }
